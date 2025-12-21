@@ -1,0 +1,45 @@
+name: no_mercy_alarm
+description: A no-snooze alarm app with password protection
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # Alarm and notification management
+  android_alarm_manager_plus: ^4.0.3
+  flutter_local_notifications: ^17.0.0
+  
+  # Audio playback
+  audioplayers: ^6.0.0
+  
+  # File picking
+  file_picker: ^8.0.0
+  
+  # State management and storage
+  shared_preferences: ^2.2.3
+  path_provider: ^2.1.3
+  
+  # Permissions
+  permission_handler: ^11.3.1
+  
+  # UI
+  intl: ^0.19.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
+  
+  #assets:
+  #  - assets/sounds/
+    
+  # Default alarm sounds (you'll need to add these)
+  # Place MP3 files in assets/sounds/ folder
