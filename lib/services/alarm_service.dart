@@ -114,7 +114,7 @@ class AlarmService {
       ledOnMs: 1000,
       ledOffMs: 500,
       ticker: 'ALARM RINGING NOW!',
-      styleInformation: BigTextStyleInformation(
+      styleInformation: const BigTextStyleInformation(
         '🚨 YOUR ALARM IS RINGING! Tap here immediately to open the app and enter your password to stop it.',
         htmlFormatBigText: true,
         contentTitle: '⏰⏰⏰ ALARM RINGING! ⏰⏰⏰',
@@ -161,15 +161,20 @@ class AlarmService {
   }
 
   static Future<List<AlarmModel>> getAllAlarms() async {
-    final keys = _prefs.getKeys().where((k) => k.startsWith('alarm_'));
+    // Only get keys that start with 'alarm_' and have numbers (actual alarms)
+    final keys = _prefs.getKeys().where((k) => 
+      k.startsWith('alarm_') && 
+      k != 'alarm_ringing' && 
+      k != 'active_alarm_id'
+    );
     final alarms = <AlarmModel>[];
     final now = DateTime.now();
 
     for (final key in keys) {
-      final str = _prefs.getString(key);
-      if (str == null) continue;
-
       try {
+        final str = _prefs.getString(key);
+        if (str == null) continue;
+
         final alarm = AlarmModel.fromJson(jsonDecode(str));
         // Keep alarms that are in the future OR very recently past (within 5 seconds)
         if (alarm.time.isAfter(now.subtract(const Duration(seconds: 5)))) {
@@ -179,7 +184,9 @@ class AlarmService {
           print('🗑️ Removed old alarm: $key');
         }
       } catch (e) {
-        print('⚠️ Error parsing alarm $key: $e');
+        print('⚠️ Error with alarm $key: $e');
+        // Remove corrupted data
+        await _prefs.remove(key);
       }
     }
 

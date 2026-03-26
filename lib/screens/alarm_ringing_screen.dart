@@ -81,10 +81,83 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
 
     print('✅ Correct password entered - stopping alarm');
 
+    // Stop the sound
     await _player.stop();
+    
+    // Show success message
+    setState(() => error = "");
+    
+    // Show success animation
+    await _showSuccessAndClose();
+  }
+
+  Future<void> _showSuccessAndClose() async {
+    // Show success dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.all(40),
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: Colors.green.shade700,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.green.withOpacity(0.5),
+                  blurRadius: 20,
+                  spreadRadius: 10,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.check_circle_outline,
+                  color: Colors.white,
+                  size: 80,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  "Alarm Stopped!",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  "Have a great day!",
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Wait a moment
+    await Future.delayed(const Duration(seconds: 2));
+
+    // Stop the alarm service
     await AlarmService.stopAlarm();
 
-    if (mounted) Navigator.pop(context);
+    // Close everything and go back to home
+    if (mounted) {
+      // Pop the success dialog
+      Navigator.of(context, rootNavigator: true).pop();
+      // Pop the ringing screen
+      Navigator.of(context, rootNavigator: true).pop();
+    }
   }
 
   @override
@@ -296,7 +369,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                             const SizedBox(height: 16),
                             SizedBox(
                               width: double.infinity,
-                              height: 30,
+                              height: 60,
                               child: ElevatedButton(
                                 onPressed: _sliderCompleted ? _stop : null,
                                 style: ElevatedButton.styleFrom(
