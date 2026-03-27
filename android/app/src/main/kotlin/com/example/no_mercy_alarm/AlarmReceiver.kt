@@ -13,30 +13,26 @@ class AlarmReceiver : BroadcastReceiver() {
 
         // Mark ringing + active id in SharedPreferences
         // Use the SAME prefs file/keys as the shared_preferences Flutter plugin
-        // Use Flutter's shared_preferences storage format (strings with prefixes)
         val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
 
-        // Read flutter.alarm_ringing regardless of previous type
+        // tolerate both bool and string from earlier experiments
         val alreadyRinging: Boolean = try {
-            // preferred format going forward (string)
-            prefs.getString("flutter.alarm_ringing", "false") == "true"
-        } catch (_: ClassCastException) {
-            // legacy format from earlier buggy build (boolean)
             prefs.getBoolean("flutter.alarm_ringing", false)
+        } catch (_: ClassCastException) {
+            prefs.getString("flutter.alarm_ringing", "false") == "true"
         }
 
         if (alreadyRinging) return
 
-        // Write in correct shared_preferences string format
         prefs.edit()
-            .putString("flutter.alarm_ringing", "true")
-            .putString("flutter.active_alarm_id", "i:$alarmId")
+            .putBoolean("flutter.alarm_ringing", true)
+            .putInt("flutter.active_alarm_id", alarmId)
             .apply()
 
-        // Start foreground service for audio
-        val serviceIntent = Intent(context, RingingService::class.java).apply {
-            putExtra(EXTRA_ALARM_ID, alarmId)
-        }
+                // Start foreground service for audio
+                val serviceIntent = Intent(context, RingingService::class.java).apply {
+                    putExtra(EXTRA_ALARM_ID, alarmId)
+                }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             ContextCompat.startForegroundService(context, serviceIntent)
