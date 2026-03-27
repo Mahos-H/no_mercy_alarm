@@ -38,7 +38,7 @@ class RingingService : Service() {
         stopAudio()
 
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-        val alarmJson = prefs.getString("flutter.alarm_$alarmId", null)
+        val alarmJson = prefs.getString("alarm_$alarmId", null)
         val customPath = extractSoundPath(alarmJson)
 
         try {

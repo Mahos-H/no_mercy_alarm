@@ -13,21 +13,17 @@ class AlarmReceiver : BroadcastReceiver() {
 
         // Mark ringing + active id in SharedPreferences
         // Use the SAME prefs file/keys as the shared_preferences Flutter plugin
+        // ...
         val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
 
-        // tolerate both bool and string from earlier experiments
-        val alreadyRinging: Boolean = try {
-            prefs.getBoolean("flutter.alarm_ringing", false)
-        } catch (_: ClassCastException) {
-            prefs.getString("flutter.alarm_ringing", "false") == "true"
-        }
-
+        val alreadyRinging = prefs.getBoolean("alarm_ringing", false)
         if (alreadyRinging) return
 
         prefs.edit()
-            .putBoolean("flutter.alarm_ringing", true)
-            .putInt("flutter.active_alarm_id", alarmId)
-            .apply()
+        .putBoolean("alarm_ringing", true)
+        .putInt("active_alarm_id", alarmId)
+        .apply()
+        // ...
 
                 // Start foreground service for audio
                 val serviceIntent = Intent(context, RingingService::class.java).apply {
