@@ -6,39 +6,22 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/alarm_model.dart';
 import '../services/alarm_service.dart';
-import '../screens/alarm_ringing_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+class _HomeScreenState extends State<HomeScreen> {
   List<AlarmModel> alarms = [];
-  bool _navigatedToAlarm = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _loadAlarms();
-    _startRingingWatcher();
     _listenToAlarmChanges();
-  }
-
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
-      _checkForRingingAlarm();
-    }
   }
 
   // Listen to alarm changes via stream
@@ -48,35 +31,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         setState(() => alarms = updatedAlarms);
       }
     });
-  }
-
-  void _startRingingWatcher() {
-    Future.doWhile(() async {
-      await Future.delayed(const Duration(seconds: 1));
-
-      if (!mounted || _navigatedToAlarm) return false;
-
-      await _checkForRingingAlarm();
-      
-      return mounted;
-    });
-  }
-
-  Future<void> _checkForRingingAlarm() async {
-    if (await AlarmService.isAlarmRinging()) {
-      final alarm = await AlarmService.getActiveAlarm();
-      if (alarm != null && mounted && !_navigatedToAlarm) {
-        _navigatedToAlarm = true;
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => AlarmRingingScreen(alarm: alarm),
-          ),
-        ).then((_) {
-          _navigatedToAlarm = false;
-        });
-      }
-    }
   }
 
   Future<void> _loadAlarms() async {
@@ -210,24 +164,20 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       alarmTime = alarmTime.add(const Duration(days: 1));
     }
 
-    // Generate a safe ID (32-bit integer)
     final alarm = AlarmModel(
-      id: DateTime.now().millisecondsSinceEpoch % 2147483647, // Max 32-bit int
+      id: DateTime.now().millisecondsSinceEpoch % 2147483647,
       time: alarmTime,
       password: password,
       isActive: true,
       soundPath: chosenSoundPath,
     );
 
-    // Schedule alarm - this will automatically update UI via stream
     await AlarmService.scheduleAlarm(alarm);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Alarm set for ${_formatTime(alarmTime)}',
-          ),
+          content: Text('Alarm set for ${_formatTime(alarmTime)}'),
           duration: const Duration(seconds: 2),
         ),
       );
@@ -235,9 +185,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _deleteAlarm(int id) async {
-    // This will automatically update UI via stream
     await AlarmService.cancelAlarm(id);
-    
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Alarm deleted')),
@@ -339,7 +288,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     alarm.time.year == now.year;
 
                 return Card(
-                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  margin:
+                      const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Colors.blue.shade100,
@@ -359,12 +309,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         if (alarm.soundPath != null)
                           Text(
                             alarm.soundPath!.split(Platform.pathSeparator).last,
-                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey[600]),
                           )
                         else
                           Text(
                             'Default sound',
-                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                            style: TextStyle(
+                                fontSize: 11, color: Colors.grey[600]),
                           ),
                       ],
                     ),

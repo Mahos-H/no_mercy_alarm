@@ -1,6 +1,8 @@
+import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
+
 import 'services/alarm_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/alarm_ringing_screen.dart';
@@ -8,13 +10,12 @@ import 'screens/alarm_ringing_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize alarm service
-  await AlarmService.initialize();
+  // AlarmManager must be initialized before you use it (even if scheduling is native)
+  await AndroidAlarmManager.initialize();
 
-  // Request permissions
+  await AlarmService.initialize();
   await _requestPermissions();
 
-  // Lock orientation to portrait
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -24,25 +25,19 @@ void main() async {
 }
 
 Future<void> _requestPermissions() async {
-  // Request notification permission
   await Permission.notification.request();
 
-  // Request exact alarm permission (Android 12+). Some platforms may not expose this via permission_handler;
-  // handle gracefully if not available.
   try {
     if (await Permission.scheduleExactAlarm.isDenied) {
       await Permission.scheduleExactAlarm.request();
     }
-  } catch (_) {
-    // ignore if permission isn't available on the platform / package version
-  }
+  } catch (_) {}
 
-  // Request storage permission for custom sounds
   await Permission.storage.request();
 }
 
 class NoMercyAlarmApp extends StatelessWidget {
-  const NoMercyAlarmApp({Key? key}) : super(key: key);
+  const NoMercyAlarmApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -83,18 +78,21 @@ class NoMercyAlarmApp extends StatelessWidget {
 }
 
 class AlarmCheckerScreen extends StatefulWidget {
-  const AlarmCheckerScreen({Key? key}) : super(key: key);
+  const AlarmCheckerScreen({super.key});
 
   @override
   State<AlarmCheckerScreen> createState() => _AlarmCheckerScreenState();
 }
 
-class _AlarmCheckerScreenState extends State<AlarmCheckerScreen> with WidgetsBindingObserver {
+class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
+    with WidgetsBindingObserver {
+  bool _navigated = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _checkAlarmStatus();
+    _checkAndRoute();
   }
 
   @override
@@ -106,22 +104,28 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen> with WidgetsBin
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      _checkAlarmStatus();
+      _checkAndRoute();
     }
   }
 
-  Future<void> _checkAlarmStatus() async {
-    final isRinging = await AlarmService.isAlarmRinging();
+  Future<void> _checkAndRoute() async {
+    if (_navigated) return;
 
-    if (isRinging && mounted) {
+    final isRinging = await AlarmService.isAlarmRinging();
+    if (!mounted) return;
+
+    if (isRinging) {
       final alarm = await AlarmService.getActiveAlarm();
+      if (!mounted) return;
       if (alarm != null) {
-        // Navigate to ringing screen (pass the alarm object)
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(
-            builder: (context) => AlarmRingingScreen(alarm: alarm),
-          ),
-        );
+        _navigated = true;
+        Navigator.of(context)
+            .pushReplacement(
+              MaterialPageRoute(
+                builder: (_) => AlarmRingingScreen(alarm: alarm),
+              ),
+            )
+            .then((_) => _navigated = false);
       }
     }
   }

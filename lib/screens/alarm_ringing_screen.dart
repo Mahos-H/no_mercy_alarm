@@ -1,12 +1,12 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:audioplayers/audioplayers.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/alarm_model.dart';
 import '../services/alarm_service.dart';
 
 class AlarmRingingScreen extends StatefulWidget {
   final AlarmModel alarm;
-  const AlarmRingingScreen({Key? key, required this.alarm}) : super(key: key);
+  const AlarmRingingScreen({super.key, required this.alarm});
 
   @override
   State<AlarmRingingScreen> createState() => _AlarmRingingScreenState();
@@ -15,48 +15,73 @@ class AlarmRingingScreen extends StatefulWidget {
 class _AlarmRingingScreenState extends State<AlarmRingingScreen>
     with SingleTickerProviderStateMixin {
   final _controller = TextEditingController();
-  final _player = AudioPlayer();
   String error = '';
-  bool _isPlaying = false;
+
   double _sliderValue = 0.0;
   bool _sliderCompleted = false;
+
   late AnimationController _pulseController;
+
+  // reveal logic
+  int? _firstWrongAtMs;
+  bool _showPassword = false;
+
+  static const _revealDelayMs = 120000; // 120 seconds
 
   @override
   void initState() {
     super.initState();
-    _play();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
     )..repeat(reverse: true);
+
+    _loadFirstWrongAt();
   }
 
   @override
   void dispose() {
-    _player.dispose();
     _controller.dispose();
     _pulseController.dispose();
     super.dispose();
   }
 
-  Future<void> _play() async {
-    try {
-      await _player.setReleaseMode(ReleaseMode.loop);
-      await _player.setVolume(1.0);
-
-      if (widget.alarm.soundPath != null &&
-          File(widget.alarm.soundPath!).existsSync()) {
-        await _player.play(DeviceFileSource(widget.alarm.soundPath!));
-      } else {
-        await _player.play(AssetSource('sounds/alarm_sound.mp3'));
-      }
-
-      setState(() => _isPlaying = true);
-      print('🔊 Alarm sound playing');
-    } catch (e) {
-      print('⚠️ Error playing alarm sound: $e');
+  Future<void> _loadFirstWrongAt() async {
+    final prefs = await SharedPreferences.getInstance();
+    final v = prefs.getInt('alarm_${widget.alarm.id}_first_wrong_at_ms');
+    if (mounted) {
+      setState(() => _firstWrongAtMs = v);
     }
+  }
+
+  Future<void> _recordFirstWrongIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'alarm_${widget.alarm.id}_first_wrong_at_ms';
+    final existing = prefs.getInt(key);
+    if (existing != null) {
+      _firstWrongAtMs = existing;
+      return;
+    }
+    final now = DateTime.now().millisecondsSinceEpoch;
+    await prefs.setInt(key, now);
+    _firstWrongAtMs = now;
+  }
+
+  bool get _revealAllowed {
+    if (_firstWrongAtMs == null) return false;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    return (now - _firstWrongAtMs!) >= _revealDelayMs;
+  }
+
+  String _revealCountdownText() {
+    if (_firstWrongAtMs == null) return '';
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final remaining = _revealDelayMs - (now - _firstWrongAtMs!);
+    if (remaining <= 0) return 'You can reveal the password now.';
+    final seconds = (remaining / 1000).ceil();
+    final mm = (seconds ~/ 60).toString().padLeft(2, '0');
+    final ss = (seconds % 60).toString().padLeft(2, '0');
+    return 'Reveal available in $mm:$ss';
   }
 
   Future<void> _stop() async {
@@ -71,28 +96,21 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
     }
 
     if (_controller.text != widget.alarm.password) {
+      await _recordFirstWrongIfNeeded();
       setState(() {
         error = "Wrong password!";
         _sliderValue = 0.0;
         _sliderCompleted = false;
+        _showPassword = false;
       });
       return;
     }
 
-    print('✅ Correct password entered - stopping alarm');
-
-    // Stop the sound
-    await _player.stop();
-    
-    // Show success message
     setState(() => error = "");
-    
-    // Show success animation
     await _showSuccessAndClose();
   }
 
   Future<void> _showSuccessAndClose() async {
-    // Show success dialog
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -113,16 +131,16 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                 ),
               ],
             ),
-            child: Column(
+            child: const Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(
+                Icon(
                   Icons.check_circle_outline,
                   color: Colors.white,
                   size: 80,
                 ),
-                const SizedBox(height: 16),
-                const Text(
+                SizedBox(height: 16),
+                Text(
                   "Alarm Stopped!",
                   style: TextStyle(
                     color: Colors.white,
@@ -130,8 +148,8 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                     fontWeight: FontWeight.bold,
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
+                SizedBox(height: 8),
+                Text(
                   "Have a great day!",
                   style: TextStyle(
                     color: Colors.white70,
@@ -145,23 +163,20 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
       ),
     );
 
-    // Wait a moment
     await Future.delayed(const Duration(seconds: 2));
 
-    // Stop the alarm service
     await AlarmService.stopAlarm();
 
-    // Close everything and go back to home
     if (mounted) {
-      // Pop the success dialog
-      Navigator.of(context, rootNavigator: true).pop();
-      // Pop the ringing screen
-      Navigator.of(context, rootNavigator: true).pop();
+      Navigator.of(context, rootNavigator: true).pop(); // success dialog
+      Navigator.of(context, rootNavigator: true).pop(); // ringing screen
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final revealAllowed = _revealAllowed;
+
     return PopScope(
       canPop: false,
       child: Scaffold(
@@ -185,7 +200,6 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Pulsing alarm icon
                     AnimatedBuilder(
                       animation: _pulseController,
                       builder: (context, child) {
@@ -214,8 +228,6 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                       },
                     ),
                     const SizedBox(height: 32),
-
-                    // ALARM text with shadow
                     Text(
                       "ALARM!",
                       style: TextStyle(
@@ -231,10 +243,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 8),
-
-                    // Time display
                     Text(
                       "${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}",
                       style: const TextStyle(
@@ -243,22 +252,6 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                         fontWeight: FontWeight.w300,
                       ),
                     ),
-
-                    if (_isPlaying)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.volume_up, color: Colors.white70, size: 20),
-                            SizedBox(width: 8),
-                            Text(
-                              "Sound playing",
-                              style: TextStyle(color: Colors.white70, fontSize: 14),
-                            ),
-                          ],
-                        ),
-                      ),
 
                     const SizedBox(height: 48),
 
@@ -322,7 +315,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
 
                     const SizedBox(height: 24),
 
-                    // Password input (only visible after slider)
+                    // Password container
                     AnimatedOpacity(
                       opacity: _sliderCompleted ? 1.0 : 0.3,
                       duration: const Duration(milliseconds: 300),
@@ -364,9 +357,50 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              onSubmitted: _sliderCompleted ? (_) => _stop() : null,
+                              onSubmitted:
+                                  _sliderCompleted ? (_) => _stop() : null,
                             ),
                             const SizedBox(height: 16),
+
+                            // Reveal section
+                            if (_firstWrongAtMs != null) ...[
+                              Text(
+                                _revealCountdownText(),
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              if (revealAllowed)
+                                OutlinedButton(
+                                  onPressed: () {
+                                    setState(() => _showPassword = !_showPassword);
+                                  },
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.white,
+                                    side: const BorderSide(color: Colors.white70),
+                                  ),
+                                  child: Text(_showPassword
+                                      ? "Hide password"
+                                      : "Reveal password"),
+                                ),
+                              if (revealAllowed && _showPassword)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Text(
+                                    widget.alarm.password,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                            ],
+
+                            const SizedBox(height: 12),
+
                             SizedBox(
                               width: double.infinity,
                               height: 60,
@@ -375,7 +409,8 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: Colors.white,
                                   foregroundColor: Colors.red.shade900,
-                                  disabledBackgroundColor: Colors.white.withOpacity(0.3),
+                                  disabledBackgroundColor:
+                                      Colors.white.withOpacity(0.3),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
