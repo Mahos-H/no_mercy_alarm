@@ -10,13 +10,19 @@ class StopAlarmReceiver : BroadcastReceiver() {
         context.stopService(Intent(context, RingingService::class.java))
 
         // Clear ringing state
-        val prefs = context.getSharedPreferences(AlarmReceiver.PREFS_NAME, Context.MODE_PRIVATE)
-        val activeId = prefs.getInt(AlarmReceiver.KEY_ACTIVE_ALARM_ID, -1)
+        val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+
+        val activeId: Int = try {
+            val raw = prefs.getString("flutter.active_alarm_id", null)
+            raw?.removePrefix("i:")?.toIntOrNull() ?: -1
+        } catch (_: ClassCastException) {
+            prefs.getInt("flutter.active_alarm_id", -1)
+        }
 
         prefs.edit()
-            .putBoolean(AlarmReceiver.KEY_RINGING, false)
-            .remove(AlarmReceiver.KEY_ACTIVE_ALARM_ID)
-            .remove("alarm_${activeId}_first_wrong_at_ms")
+            .putString("flutter.alarm_ringing", "false")
+            .remove("flutter.active_alarm_id")
+            .remove("flutter.alarm_${activeId}_first_wrong_at_ms")
             .apply()
     }
 }

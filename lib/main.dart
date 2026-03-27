@@ -87,12 +87,31 @@ class AlarmCheckerScreen extends StatefulWidget {
 class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
     with WidgetsBindingObserver {
   bool _navigated = false;
+  bool _startedWatcher = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+
+    // Immediate check
     _checkAndRoute();
+
+    // Start a lightweight watcher once (covers "brought to front" cases)
+    _startForegroundWatcher();
+  }
+
+  void _startForegroundWatcher() {
+    if (_startedWatcher) return;
+    _startedWatcher = true;
+
+    // Poll only while this widget exists. 300ms is responsive without being crazy.
+    Future.doWhile(() async {
+      if (!mounted) return false;
+      await _checkAndRoute();
+      await Future.delayed(const Duration(milliseconds: 300));
+      return mounted;
+    });
   }
 
   @override
@@ -114,20 +133,20 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
     final isRinging = await AlarmService.isAlarmRinging();
     if (!mounted) return;
 
-    if (isRinging) {
-      final alarm = await AlarmService.getActiveAlarm();
-      if (!mounted) return;
-      if (alarm != null) {
-        _navigated = true;
-        Navigator.of(context)
-            .pushReplacement(
-              MaterialPageRoute(
-                builder: (_) => AlarmRingingScreen(alarm: alarm),
-              ),
-            )
-            .then((_) => _navigated = false);
-      }
-    }
+    if (!isRinging) return;
+
+    final alarm = await AlarmService.getActiveAlarm();
+    if (!mounted) return;
+    if (alarm == null) return;
+
+    _navigated = true;
+    Navigator.of(context)
+        .pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => AlarmRingingScreen(alarm: alarm),
+          ),
+        )
+        .then((_) => _navigated = false);
   }
 
   @override
