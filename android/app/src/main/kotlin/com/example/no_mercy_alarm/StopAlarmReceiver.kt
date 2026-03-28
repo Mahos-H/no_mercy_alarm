@@ -6,23 +6,8 @@ import android.content.Intent
 
 class StopAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        // Stop service
+        // Emergency stop: stop audio service
         context.stopService(Intent(context, RingingService::class.java))
-
-        // Clear ringing state
-        val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
-
-        val activeId: Int = try {
-            prefs.getInt("active_alarm_id", -1)
-        } catch (_: ClassCastException) {
-            val raw = prefs.getString("active_alarm_id", null)
-            raw?.removePrefix("i:")?.toIntOrNull() ?: -1
-        }
-
-        prefs.edit()
-            .putBoolean("flutter.alarm_ringing", false)
-            .remove("active_alarm_id")
-            .remove("alarm_${activeId}_first_wrong_at_ms")
-            .apply()
+        // Do not mutate FlutterSharedPreferences here (avoids key mismatch surprises).
     }
 }

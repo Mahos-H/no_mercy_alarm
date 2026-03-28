@@ -172,7 +172,16 @@ class _HomeScreenState extends State<HomeScreen> {
       soundPath: chosenSoundPath,
     );
 
-    await AlarmService.scheduleAlarm(alarm);
+    try {
+      await AlarmService.scheduleAlarm(alarm);
+    } on StateError catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
+      return;
+    }
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

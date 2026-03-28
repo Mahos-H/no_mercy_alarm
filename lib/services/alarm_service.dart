@@ -22,6 +22,9 @@ class AlarmService {
   static final _alarmsController = StreamController<List<AlarmModel>>.broadcast();
   static Stream<List<AlarmModel>> get alarmsStream => _alarmsController.stream;
 
+  // Only accept keys like "alarm_123" (numeric id), not "alarm_ringing", etc.
+  static final RegExp _alarmKeyPattern = RegExp(r'^alarm_(\d+)$');
+
   // ================= INITIALIZATION =================
 
   static Future<void> initialize() async {
@@ -31,9 +34,6 @@ class AlarmService {
 
     await _notifications.initialize(
       settings: const InitializationSettings(android: androidInit),
-      // (optional) callbacks:
-      // onDidReceiveNotificationResponse: (resp) {},
-      // onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
     );
 
     // Create notification channel (Android)
@@ -73,26 +73,64 @@ class AlarmService {
   }
 
   static Future<List<AlarmModel>> getAllAlarms() async {
-    final keys = _prefs.getKeys().where((k) =>
-        k.startsWith('alarm_') && k != _ringingKey && k != _activeAlarmIdKey);
+    // Filter keys strictly to alarm_<number>
+    final alarmKeys = _prefs
+        .getKeys()
+        .where((k) => _alarmKeyPattern.hasMatch(k))
+        .toList(growable: false);
 
     final alarms = <AlarmModel>[];
-    for (final key in keys) {
-      final str = _prefs.getString(key);
-      if (str == null) continue;
+
+    for (final key in alarmKeys) {
+      // SAFETY: shared_preferences throws if underlying type is not String.
+      // So we read the raw map to check the type first.
+      final raw = _prefs.get(key);
+
+      if (raw == null) continue;
+
+      if (raw is! String) {
+        // Unexpected type under alarm_* key — remove it to prevent future crashes.
+        await _prefs.remove(key);
+        continue;
+      }
 
       try {
-        final alarm = AlarmModel.fromJson(jsonDecode(str));
+        final alarm = AlarmModel.fromJson(jsonDecode(raw));
         alarms.add(alarm);
       } catch (_) {
         await _prefs.remove(key);
       }
     }
 
+    // Sort by scheduled time (not creation time)
     alarms.sort((a, b) => a.time.compareTo(b.time));
     return alarms;
   }
+  static Future<AlarmModel?> getAlarmById(int id) async {
+    // Reads the stored JSON for this alarm id
+    final jsonStr = _prefs.getString('alarm_$id');
+    if (jsonStr == null) return null;
 
+    try {
+      return AlarmModel.fromJson(jsonDecode(jsonStr));
+    } catch (_) {
+      return null;
+    }
+  }
+  static Future<void> stopAlarmAndCleanup({required int alarmId}) async {
+    // stop native ringing service (audio)
+    await _channel.invokeMethod('stopRingingService');
+
+    // clear notification if any
+    await _notifications.cancel(id: alarmId);
+
+    // clear any wrong-at timestamp + remove alarm (one-shot)
+    await _prefs.remove('alarm_${alarmId}_first_wrong_at_ms');
+    await _prefs.remove('alarm_$alarmId');
+
+    final alarms = await getAllAlarms();
+    _alarmsController.add(alarms);
+  }
   static Future<void> cancelAlarm(int id) async {
     await _prefs.remove('alarm_$id');
     await _channel.invokeMethod('cancelExactAlarm', {'alarmId': id});

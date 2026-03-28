@@ -22,7 +22,6 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
 
   late AnimationController _pulseController;
 
-  // reveal logic
   int? _firstWrongAtMs;
   bool _showPassword = false;
 
@@ -165,7 +164,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
 
     await Future.delayed(const Duration(seconds: 2));
 
-    await AlarmService.stopAlarm();
+    await AlarmService.stopAlarmAndCleanup(alarmId: widget.alarm.id);
 
     if (mounted) {
       Navigator.of(context, rootNavigator: true).pop(); // success dialog
@@ -252,7 +251,6 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                         fontWeight: FontWeight.w300,
                       ),
                     ),
-
                     const SizedBox(height: 48),
 
                     // Slider to unlock
@@ -362,7 +360,6 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
                             ),
                             const SizedBox(height: 16),
 
-                            // Reveal section
                             if (_firstWrongAtMs != null) ...[
                               Text(
                                 _revealCountdownText(),

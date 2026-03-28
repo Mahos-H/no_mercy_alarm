@@ -46,6 +46,29 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
 
+                    // ===== Ring log API =====
+                    "ringLog_getLastEvent" -> {
+                        result.success(AlarmRingLog.getLastEvent(this))
+                    }
+
+                    "ringLog_getLastRungIdx" -> {
+                        result.success(AlarmRingLog.getLastRungIdx(this))
+                    }
+
+                    "ringLog_getSlot" -> {
+                        val idx = call.argument<Int>("idx")
+                        if (idx == null) {
+                            result.error("BAD_ARGS", "idx required", null)
+                            return@setMethodCallHandler
+                        }
+                        result.success(AlarmRingLog.getSlot(this, idx))
+                    }
+
+                    "ringLog_clear" -> {
+                        AlarmRingLog.clear(this)
+                        result.success(true)
+                    }
+
                     else -> result.notImplemented()
                 }
             }
@@ -56,6 +79,7 @@ class MainActivity : FlutterActivity() {
 
         val intent = Intent(context, AlarmReceiver::class.java).apply {
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
+            putExtra(AlarmReceiver.EXTRA_TRIGGER_AT_MILLIS, triggerAtMillis)
         }
 
         val pi = PendingIntent.getBroadcast(

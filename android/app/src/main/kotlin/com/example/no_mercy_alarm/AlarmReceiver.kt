@@ -11,24 +11,23 @@ class AlarmReceiver : BroadcastReceiver() {
         val alarmId = intent.getIntExtra(EXTRA_ALARM_ID, -1)
         if (alarmId == -1) return
 
-        // Mark ringing + active id in SharedPreferences
-        // Use the SAME prefs file/keys as the shared_preferences Flutter plugin
-        // ...
-        val prefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val scheduledAtMillis = intent.getLongExtra(EXTRA_TRIGGER_AT_MILLIS, -1L)
+        val firedAtMillis = System.currentTimeMillis()
 
-        val alreadyRinging = prefs.getBoolean("alarm_ringing", false)
-        if (alreadyRinging) return
+        // Always append into ring-buffer (overwrites after 20)
+        AlarmRingLog.appendFired(
+            context = context,
+            alarmId = alarmId,
+            scheduledAtMillis = if (scheduledAtMillis > 0) scheduledAtMillis else firedAtMillis,
+            firedAtMillis = firedAtMillis,
+            state = "FIRED",
+        )
 
-        prefs.edit()
-        .putBoolean("alarm_ringing", true)
-        .putInt("active_alarm_id", alarmId)
-        .apply()
-        // ...
-
-                // Start foreground service for audio
-                val serviceIntent = Intent(context, RingingService::class.java).apply {
-                    putExtra(EXTRA_ALARM_ID, alarmId)
-                }
+        // Start foreground service for audio
+        val serviceIntent = Intent(context, RingingService::class.java).apply {
+            putExtra(EXTRA_ALARM_ID, alarmId)
+            putExtra(EXTRA_FROM_ALARM, true)
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             ContextCompat.startForegroundService(context, serviceIntent)
@@ -36,7 +35,7 @@ class AlarmReceiver : BroadcastReceiver() {
             context.startService(serviceIntent)
         }
 
-        // Launch the app UI full-screen immediately
+        // Best-effort: try to bring UI; may be blocked by background restrictions.
         val activityIntent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -44,14 +43,16 @@ class AlarmReceiver : BroadcastReceiver() {
             putExtra(EXTRA_ALARM_ID, alarmId)
             putExtra(EXTRA_FROM_ALARM, true)
         }
-        context.startActivity(activityIntent)
+        try {
+            context.startActivity(activityIntent)
+        } catch (_: Throwable) {
+            // Notification OPEN action should still allow user to bring app to front.
+        }
     }
 
     companion object {
         const val EXTRA_ALARM_ID = "alarm_id"
         const val EXTRA_FROM_ALARM = "from_alarm"
-
-
-        const val KEY_ACTIVE_ALARM_ID = "active_alarm_id"
+        const val EXTRA_TRIGGER_AT_MILLIS = "trigger_at_millis"
     }
 }

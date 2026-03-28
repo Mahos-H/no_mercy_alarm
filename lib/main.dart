@@ -4,13 +4,13 @@ import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import 'services/alarm_service.dart';
+import 'services/ring_log_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/alarm_ringing_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // AlarmManager must be initialized before you use it (even if scheduling is native)
   await AndroidAlarmManager.initialize();
 
   await AlarmService.initialize();
@@ -94,10 +94,7 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // Immediate check
     _checkAndRoute();
-
-    // Start a lightweight watcher once (covers "brought to front" cases)
     _startForegroundWatcher();
   }
 
@@ -105,7 +102,6 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
     if (_startedWatcher) return;
     _startedWatcher = true;
 
-    // Poll only while this widget exists. 300ms is responsive without being crazy.
     Future.doWhile(() async {
       if (!mounted) return false;
       await _checkAndRoute();
@@ -130,12 +126,23 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
   Future<void> _checkAndRoute() async {
     if (_navigated) return;
 
-    final isRinging = await AlarmService.isAlarmRinging();
+    final lastEvent = await RingLogService.getLastEvent();
     if (!mounted) return;
 
-    if (!isRinging) return;
+    if (lastEvent == null) return;
 
-    final alarm = await AlarmService.getActiveAlarm();
+    final state = (lastEvent['state'] ?? '').toString();
+    if (state != 'FIRED' && state != 'SHOWN') {
+      return;
+    }
+
+    final alarmIdRaw = lastEvent['alarmId'];
+    final alarmId = alarmIdRaw is int
+        ? alarmIdRaw
+        : int.tryParse(alarmIdRaw?.toString() ?? '');
+    if (alarmId == null) return;
+
+    final alarm = await AlarmService.getAlarmById(alarmId);
     if (!mounted) return;
     if (alarm == null) return;
 

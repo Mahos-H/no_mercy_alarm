@@ -37,7 +37,10 @@ class RingingService : Service() {
     private fun startAudioForAlarm(alarmId: Int) {
         stopAudio()
 
+        // Flutter shared_preferences stores keys in "FlutterSharedPreferences" with the SAME key names you use in Dart.
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+
+        // IMPORTANT: AlarmService.scheduleAlarm stores under 'alarm_<id>' (no 'flutter.' prefix)
         val alarmJson = prefs.getString("alarm_$alarmId", null)
         val customPath = extractSoundPath(alarmJson)
 
@@ -148,6 +151,8 @@ class RingingService : Service() {
             .setOngoing(true)
             .setAutoCancel(false)
             .setContentIntent(openPending)
+            // Best-effort: request full-screen UI
+            .setFullScreenIntent(openPending, true)
             .addAction(0, "OPEN", openPending)
             .addAction(0, "EMERGENCY STOP", stopPending)
             .build()
