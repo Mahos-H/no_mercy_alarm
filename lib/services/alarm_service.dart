@@ -141,11 +141,7 @@ class AlarmService {
 
   // ================= RINGING STATE =================
 
-  static Future<bool> isAlarmRinging() async {
-    final v = _prefs.getBool(_ringingKey) ?? false;
-    print("isAlarmRinging=$v");
-    return v;
-  }
+
 
   static Future<AlarmModel?> getActiveAlarm() async {
     final id = _prefs.getInt(_activeAlarmIdKey);

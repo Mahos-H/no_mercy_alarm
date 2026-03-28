@@ -48,9 +48,7 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
   Future<void> _loadFirstWrongAt() async {
     final prefs = await SharedPreferences.getInstance();
     final v = prefs.getInt('alarm_${widget.alarm.id}_first_wrong_at_ms');
-    if (mounted) {
-      setState(() => _firstWrongAtMs = v);
-    }
+    if (mounted) setState(() => _firstWrongAtMs = v);
   }
 
   Future<void> _recordFirstWrongIfNeeded() async {
@@ -117,14 +115,14 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
         canPop: false,
         child: Center(
           child: Container(
-            margin: const EdgeInsets.all(40),
-            padding: const EdgeInsets.all(32),
+            margin: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
               color: Colors.green.shade700,
               borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.green.withOpacity(0.5),
+                  color: Colors.green.withValues(alpha: 0.5),
                   blurRadius: 20,
                   spreadRadius: 10,
                 ),
@@ -133,27 +131,20 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
             child: const Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.check_circle_outline,
-                  color: Colors.white,
-                  size: 80,
-                ),
-                SizedBox(height: 16),
+                Icon(Icons.check_circle_outline, color: Colors.white, size: 72),
+                SizedBox(height: 12),
                 Text(
                   "Alarm Stopped!",
                   style: TextStyle(
                     color: Colors.white,
-                    fontSize: 28,
+                    fontSize: 26,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 SizedBox(height: 8),
                 Text(
                   "Have a great day!",
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
                 ),
               ],
             ),
@@ -163,13 +154,14 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
     );
 
     await Future.delayed(const Duration(seconds: 2));
-
     await AlarmService.stopAlarmAndCleanup(alarmId: widget.alarm.id);
 
-    if (mounted) {
-      Navigator.of(context, rootNavigator: true).pop(); // success dialog
-      Navigator.of(context, rootNavigator: true).pop(); // ringing screen
-    }
+    if (!mounted) return;
+
+    // Close dialog first
+    Navigator.of(context, rootNavigator: true).pop();
+    // go back to HomeScreen
+    Navigator.of(context).pop();
   }
 
   @override
@@ -179,257 +171,268 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
     return PopScope(
       canPop: false,
       child: Scaffold(
+        resizeToAvoidBottomInset: true,
         backgroundColor: Colors.red.shade900,
         body: Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [
-                Colors.red.shade900,
-                Colors.red.shade700,
-                Colors.red.shade900,
-              ],
+              colors: [Colors.red.shade900, Colors.red.shade700, Colors.red.shade900],
             ),
           ),
           child: SafeArea(
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    AnimatedBuilder(
-                      animation: _pulseController,
-                      builder: (context, child) {
-                        return Transform.scale(
-                          scale: 1.0 + (_pulseController.value * 0.2),
-                          child: Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Colors.white.withOpacity(0.2),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.white.withOpacity(0.3),
-                                  blurRadius: 20,
-                                  spreadRadius: 10,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final h = constraints.maxHeight;
+                final topGap = (h * 0.03).clamp(8.0, 20.0);
+                final midGap = (h * 0.04).clamp(12.0, 28.0);
+                final bigGap = (h * 0.05).clamp(16.0, 36.0);
+
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(minHeight: constraints.maxHeight - 40),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(height: topGap),
+
+                        AnimatedBuilder(
+                          animation: _pulseController,
+                          builder: (context, child) {
+                            return Transform.scale(
+                              scale: 1.0 + (_pulseController.value * 0.15),
+                              child: Container(
+                                padding: const EdgeInsets.all(20),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.white.withValues(alpha: 0.25),
+                                      blurRadius: 20,
+                                      spreadRadius: 10,
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                            child: const Icon(
-                              Icons.alarm,
-                              size: 100,
-                              color: Colors.white,
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 32),
-                    Text(
-                      "ALARM!",
-                      style: TextStyle(
-                        fontSize: 56,
-                        fontWeight: FontWeight.w900,
-                        color: Colors.white,
-                        shadows: [
-                          Shadow(
-                            color: Colors.black.withOpacity(0.5),
-                            offset: const Offset(2, 2),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}",
-                      style: const TextStyle(
-                        fontSize: 32,
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w300,
-                      ),
-                    ),
-                    const SizedBox(height: 48),
-
-                    // Slider to unlock
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Colors.white.withOpacity(0.3),
-                          width: 2,
+                                child: const Icon(Icons.alarm, size: 84, color: Colors.white),
+                              ),
+                            );
+                          },
                         ),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            _sliderCompleted
-                                ? "✓ Unlocked - Enter password"
-                                : "Slide to unlock →",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          SliderTheme(
-                            data: SliderTheme.of(context).copyWith(
-                              trackHeight: 60,
-                              thumbShape: const RoundSliderThumbShape(
-                                enabledThumbRadius: 30,
-                              ),
-                              overlayShape: const RoundSliderOverlayShape(
-                                overlayRadius: 40,
-                              ),
-                              activeTrackColor: Colors.green,
-                              inactiveTrackColor: Colors.white.withOpacity(0.3),
-                              thumbColor: Colors.white,
-                            ),
-                            child: Slider(
-                              value: _sliderValue,
-                              min: 0.0,
-                              max: 100.0,
-                              onChanged: _sliderCompleted
-                                  ? null
-                                  : (value) {
-                                      setState(() {
-                                        _sliderValue = value;
-                                        if (value >= 95.0) {
-                                          _sliderCompleted = true;
-                                          _sliderValue = 100.0;
-                                        }
-                                      });
-                                    },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
 
-                    const SizedBox(height: 24),
+                        SizedBox(height: midGap),
 
-                    // Password container
-                    AnimatedOpacity(
-                      opacity: _sliderCompleted ? 1.0 : 0.3,
-                      duration: const Duration(milliseconds: 300),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.3),
-                            width: 2,
+                        Text(
+                          "ALARM!",
+                          style: TextStyle(
+                            fontSize: 52,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.white,
+                            shadows: [
+                              Shadow(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                offset: const Offset(2, 2),
+                                blurRadius: 4,
+                              ),
+                            ],
                           ),
                         ),
-                        child: Column(
-                          children: [
-                            TextField(
-                              controller: _controller,
-                              obscureText: true,
-                              enabled: _sliderCompleted,
-                              autofocus: _sliderCompleted,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 4,
-                              ),
-                              textAlign: TextAlign.center,
-                              decoration: InputDecoration(
-                                hintText: "Enter Password",
-                                hintStyle: TextStyle(
-                                  color: Colors.white.withOpacity(0.5),
-                                  fontSize: 18,
-                                ),
-                                border: InputBorder.none,
-                                errorText: error.isEmpty ? null : error,
-                                errorStyle: const TextStyle(
-                                  color: Colors.yellow,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              onSubmitted:
-                                  _sliderCompleted ? (_) => _stop() : null,
-                            ),
-                            const SizedBox(height: 16),
+                        const SizedBox(height: 6),
+                        Text(
+                          "${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}",
+                          style: const TextStyle(
+                            fontSize: 28,
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w300,
+                          ),
+                        ),
 
-                            if (_firstWrongAtMs != null) ...[
+                        SizedBox(height: bigGap),
+
+                        // Slider to unlock
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
+                          ),
+                          child: Column(
+                            children: [
                               Text(
-                                _revealCountdownText(),
+                                _sliderCompleted
+                                    ? "✓ Unlocked - Enter password"
+                                    : "Slide to unlock →",
                                 style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 14,
+                                  color: Colors.white,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              const SizedBox(height: 8),
-                              if (revealAllowed)
-                                OutlinedButton(
-                                  onPressed: () {
-                                    setState(() => _showPassword = !_showPassword);
-                                  },
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: Colors.white,
-                                    side: const BorderSide(color: Colors.white70),
-                                  ),
-                                  child: Text(_showPassword
-                                      ? "Hide password"
-                                      : "Reveal password"),
+                              const SizedBox(height: 12),
+                              SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  trackHeight: 54,
+                                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 26),
+                                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 36),
+                                  activeTrackColor: Colors.green,
+                                  inactiveTrackColor: Colors.white.withValues(alpha: 0.3),
+                                  thumbColor: Colors.white,
                                 ),
-                              if (revealAllowed && _showPassword)
-                                Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Text(
-                                    widget.alarm.password,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 18,
+                                child: Slider(
+                                  value: _sliderValue,
+                                  min: 0.0,
+                                  max: 100.0,
+                                  onChanged: _sliderCompleted
+                                      ? null
+                                      : (value) {
+                                          setState(() {
+                                            _sliderValue = value;
+                                            if (value >= 95.0) {
+                                              _sliderCompleted = true;
+                                              _sliderValue = 100.0;
+                                            }
+                                            else{
+                                              setState(() => _sliderValue = 0.0);
+                                            }
+                                          });
+                                        },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 18),
+
+                        // Password container
+                        AnimatedOpacity(
+                          opacity: _sliderCompleted ? 1.0 : 0.35,
+                          duration: const Duration(milliseconds: 250),
+                          child: Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2),
+                            ),
+                            child: Column(
+                              children: [
+                                TextField(
+                                  controller: _controller,
+                                  obscureText: false,
+                                  enabled: _sliderCompleted,
+                                  autofocus: _sliderCompleted,
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 3,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  decoration: InputDecoration(
+                                    hintText: "Enter Password",
+                                    hintStyle: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.5),
+                                      fontSize: 16,
+                                    ),
+                                    border: InputBorder.none,
+                                    errorText: error.isEmpty ? null : error,
+                                    errorStyle: const TextStyle(
+                                      color: Colors.yellow,
+                                      fontSize: 14,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
+                                  onSubmitted: _sliderCompleted ? (_) => _stop() : null,
                                 ),
-                            ],
+                                const SizedBox(height: 12),
 
-                            const SizedBox(height: 12),
-
-                            SizedBox(
-                              width: double.infinity,
-                              height: 60,
-                              child: ElevatedButton(
-                                onPressed: _sliderCompleted ? _stop : null,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: Colors.red.shade900,
-                                  disabledBackgroundColor:
-                                      Colors.white.withOpacity(0.3),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                if (_firstWrongAtMs != null) ...[
+                                  Text(
+                                    _revealCountdownText(),
+                                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                                    textAlign: TextAlign.center,
                                   ),
-                                  textStyle: const TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
+                                  const SizedBox(height: 8),
+                                  if (revealAllowed)
+                                    OutlinedButton(
+                                      onPressed: () {
+                                        setState(() => _showPassword = !_showPassword);
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.white,
+                                        side: const BorderSide(color: Colors.white70),
+                                      ),
+                                      child: Text(_showPassword ? "Hide password" : "Reveal password"),
+                                    ),
+                                  if (revealAllowed && _showPassword)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        widget.alarm.password,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+
+                                const SizedBox(height: 10),
+
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 56,
+                                  child: ElevatedButton(
+                                    onPressed: _sliderCompleted ? _stop : null,
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.white,
+                                      foregroundColor: Colors.red.shade900,
+                                      disabledBackgroundColor: Colors.white.withValues(alpha: 0.3),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      textStyle: const TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    child: const Text("STOP ALARM"),
                                   ),
                                 ),
-                                child: const Text("STOP ALARM"),
-                              ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
-                      ),
+
+                        SizedBox(height: topGap),
+                      ],
                     ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ),
       ),
+    );
+  }
+}
+
+/// This avoids importing HomeScreen here (keeps the file independent).
+/// We just need a widget to land on; main.dart will rebuild HomeScreen anyway.
+class _BackToHomePlaceholder extends StatelessWidget {
+  const _BackToHomePlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Colors.black,
+      body: Center(child: CircularProgressIndicator()),
     );
   }
 }

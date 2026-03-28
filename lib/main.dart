@@ -148,7 +148,7 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
 
     _navigated = true;
     Navigator.of(context)
-        .pushReplacement(
+        .push(
           MaterialPageRoute(
             builder: (_) => AlarmRingingScreen(alarm: alarm),
           ),
