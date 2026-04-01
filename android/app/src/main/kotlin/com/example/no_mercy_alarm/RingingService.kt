@@ -46,7 +46,7 @@ class RingingService : Service() {
         val prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
 
         // IMPORTANT: AlarmService.scheduleAlarm stores under 'alarm_<id>' (no 'flutter.' prefix)
-        val alarmJson = prefs.getString("alarm_$alarmId", null)
+        val alarmJson = prefs.getString("alarm_$alarmId", null) ?: prefs.getString("flutter.alarm_$alarmId", null)
         val customPath = extractSoundPath(alarmJson)
 
         try {
@@ -139,10 +139,12 @@ class RingingService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
         )
 
-        val stopIntent = Intent(this, StopAlarmReceiver::class.java)
+        val stopIntent = Intent(this, StopAlarmReceiver::class.java).apply {
+            putExtra(AlarmReceiver.EXTRA_ALARM_ID, alarmId)
+        }
         val stopPending = PendingIntent.getBroadcast(
             this,
-            2,
+            alarmId, // use alarmId as requestCode to keep it unique
             stopIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or immutableFlag()
         )

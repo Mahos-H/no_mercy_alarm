@@ -435,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     trailing: IconButton(
                       icon: Icon(Icons.delete, color: isActive ? Colors.grey : Colors.red),
-                      onPressed: isActive ? () => _deleteAlarm(alarm) : () => _deleteAlarm(alarm),
+                      onPressed: () => _deleteAlarm(alarm),
                       // (we still route through _deleteAlarm so it can show snackbar)
                     ),
                   ),

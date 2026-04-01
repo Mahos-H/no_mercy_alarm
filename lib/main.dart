@@ -34,8 +34,6 @@ Future<void> _requestPermissions() async {
       await Permission.scheduleExactAlarm.request();
     }
   } catch (_) {}
-
-  await Permission.storage.request();
 }
 
 class NoMercyAlarmApp extends StatelessWidget {

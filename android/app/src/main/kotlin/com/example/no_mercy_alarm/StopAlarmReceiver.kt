@@ -6,8 +6,20 @@ import android.content.Intent
 
 class StopAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        // Emergency stop: stop audio service
+        val alarmId = intent?.getIntExtra(AlarmReceiver.EXTRA_ALARM_ID, -1) ?: -1
+
+        // Stop audio
         context.stopService(Intent(context, RingingService::class.java))
-        // Do not mutate FlutterSharedPreferences here (avoids key mismatch surprises).
+
+        // Clear/advance queue so it doesn't get stuck
+        if (alarmId > 0) {
+            RingQueue.stopAndAdvance(context, alarmId)
+        } else {
+            // Fallback: if missing alarmId, clear everything (optional)
+            RingQueue.clear(context)
+        }
+
+        // Optional: cancel the foreground notification id (99901)
+        // (Only works if you also post/cancel via NotificationManager)
     }
 }

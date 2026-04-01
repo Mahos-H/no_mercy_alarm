@@ -130,6 +130,7 @@ class AlarmService {
   }
 
   static Future<void> cancelAlarm(int id) async {
+    await _prefs.remove('alarm_${id}_first_wrong_at_ms');
     await _prefs.remove('alarm_$id');
     await _channel.invokeMethod('cancelExactAlarm', {'alarmId': id});
 
