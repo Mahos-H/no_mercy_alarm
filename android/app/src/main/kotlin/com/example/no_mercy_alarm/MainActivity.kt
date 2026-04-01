@@ -64,12 +64,30 @@ class MainActivity : FlutterActivity() {
                         result.success(AlarmRingLog.getSlot(this, idx))
                     }
 
-                    "ringLog_clear" -> {
-                        AlarmRingLog.clear(this)
+                    "ringQueue_getActiveAlarmId" -> {
+                        result.success(RingQueue.getActiveAlarmId(this))
+                    }
+
+                    "ringQueue_clear" -> {
+                        RingQueue.clear(this)
+                        result.success(true)
+                    }
+
+                    "stopAndAdvanceQueue" -> {
+                        val alarmId = call.argument<Int>("alarmId")
+                        if (alarmId == null) {
+                            result.error("BAD_ARGS", "alarmId required", null)
+                            return@setMethodCallHandler
+                        }
+                        // stop sound first
+                        stopService(Intent(this, RingingService::class.java))
+                        // advance queue
+                        RingQueue.stopAndAdvance(this, alarmId)
                         result.success(true)
                     }
 
                     else -> result.notImplemented()
+                
                 }
             }
     }

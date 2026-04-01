@@ -1,8 +1,9 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
 
 import '../models/alarm_model.dart';
 import '../services/alarm_service.dart';
@@ -16,6 +17,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<AlarmModel> alarms = [];
+  StreamSubscription<List<AlarmModel>>? _alarmsSub;
 
   @override
   void initState() {
@@ -24,13 +26,19 @@ class _HomeScreenState extends State<HomeScreen> {
     _listenToAlarmChanges();
   }
 
-  // Listen to alarm changes via stream
   void _listenToAlarmChanges() {
-    AlarmService.alarmsStream.listen((updatedAlarms) {
+    _alarmsSub?.cancel();
+    _alarmsSub = AlarmService.alarmsStream.listen((updatedAlarms) {
       if (mounted) {
         setState(() => alarms = updatedAlarms);
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _alarmsSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadAlarms() async {
@@ -241,8 +249,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
 
                 if (confirm == true) {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.clear();
+                  await AlarmService.clearAllData();
                   await _loadAlarms();
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(

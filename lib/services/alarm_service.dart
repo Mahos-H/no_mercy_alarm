@@ -119,7 +119,7 @@ class AlarmService {
   }
   static Future<void> stopAlarmAndCleanup({required int alarmId}) async {
     // stop native ringing service (audio)
-    await _channel.invokeMethod('stopRingingService');
+    await _channel.invokeMethod('stopAndAdvanceQueue', {'alarmId': alarmId});
 
     // clear notification if any
     await _notifications.cancel(id: alarmId);
@@ -156,12 +156,23 @@ class AlarmService {
       return null;
     }
   }
-
   static Future<void> stopAlarm() async {
     final id = _prefs.getInt(_activeAlarmIdKey);
 
-    // stop native ringing service (audio)
-    await _channel.invokeMethod('stopRingingService');
+    // stop native ringing service (audio) + advance queue
+    if (id != null) {
+      await _channel.invokeMethod('stopAndAdvanceQueue', {'alarmId': id});
+    } else {
+      // fallback: ask native for the active alarm id
+      final nativeActive =
+          await _channel.invokeMethod<dynamic>('ringQueue_getActiveAlarmId');
+      final nativeId = (nativeActive is int)
+          ? nativeActive
+          : int.tryParse(nativeActive?.toString() ?? '');
+      if (nativeId != null) {
+        await _channel.invokeMethod('stopAndAdvanceQueue', {'alarmId': nativeId});
+      }
+    }
 
     // clear notification if any
     if (id != null) {
@@ -179,8 +190,7 @@ class AlarmService {
     final alarms = await getAllAlarms();
     _alarmsController.add(alarms);
   }
-
-  // ================= OPTIONAL: HEADS-UP NOTIFICATION =================
+    // ================= OPTIONAL: HEADS-UP NOTIFICATION =================
   static Future<void> showAlarmNotification(int alarmId) async {
     final androidDetails = AndroidNotificationDetails(
       'alarm_channel',
@@ -212,8 +222,43 @@ class AlarmService {
       notificationDetails: NotificationDetails(android: androidDetails),
     );
   }
+  static Future<void> clearAllData() async {
+    // 1) Cancel scheduled alarms first (so they don't keep firing after prefs wipe)
+    final alarms = await getAllAlarms();
+    for (final a in alarms) {
+      try {
+        await _channel.invokeMethod('cancelExactAlarm', {'alarmId': a.id});
+      } catch (_) {
+        // ignore best-effort
+      }
+      try {
+        await _notifications.cancel(id: a.id);
+      } catch (_) {}
+    }
+
+    // 2) Stop ringing audio (native)
+    try {
+      await _channel.invokeMethod('stopRingingService');
+    } catch (_) {}
+
+    // 3) Clear native queue + ring log
+    try {
+      await _channel.invokeMethod('ringQueue_clear');
+    } catch (_) {}
+    try {
+      await _channel.invokeMethod('ringLog_clear');
+    } catch (_) {}
+
+    // 4) Clear Dart prefs
+    await _prefs.clear();
+
+    // 5) Update stream
+    _alarmsController.add(const <AlarmModel>[]);
+  }
+
+  // Dispose note: see section 3 below (we will not close controller in app lifetime)
 
   static void dispose() {
-    _alarmsController.close();
+    //
   }
 }

@@ -26,8 +26,13 @@ class RingingService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        alarmId = intent?.getIntExtra(AlarmReceiver.EXTRA_ALARM_ID, -1) ?: -1
+        // Always ring the active alarm from the queue
+        val active = RingQueue.ensureActiveFromQueue(this) ?: run {
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
+        alarmId = active
         startForeground(NOTIF_ID, buildNotification())
         startAudioForAlarm(alarmId)
 

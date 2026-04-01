@@ -17,6 +17,7 @@ class AlarmModel {
     return {
       'id': id,
       'time': time.toIso8601String(),
+      'timeMillis': time.millisecondsSinceEpoch,
       'password': password,
       'isActive': isActive,
       'soundPath': soundPath,

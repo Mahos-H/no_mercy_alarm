@@ -14,7 +14,6 @@ class AlarmReceiver : BroadcastReceiver() {
         val scheduledAtMillis = intent.getLongExtra(EXTRA_TRIGGER_AT_MILLIS, -1L)
         val firedAtMillis = System.currentTimeMillis()
 
-        // Always append into ring-buffer (overwrites after 20)
         AlarmRingLog.appendFired(
             context = context,
             alarmId = alarmId,
@@ -23,31 +22,22 @@ class AlarmReceiver : BroadcastReceiver() {
             state = "FIRED",
         )
 
-        // Start foreground service for audio
-        val serviceIntent = Intent(context, RingingService::class.java).apply {
-            putExtra(EXTRA_ALARM_ID, alarmId)
-            putExtra(EXTRA_FROM_ALARM, true)
-        }
+        // Enqueue (persistently) so alarms are never dropped
+        RingQueue.enqueue(context, alarmId)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ContextCompat.startForegroundService(context, serviceIntent)
-        } else {
-            context.startService(serviceIntent)
-        }
+        // Start/continue ringing based on queue
+        RingQueue.startRingingServiceIfNeeded(context)
 
-        // Best-effort: try to bring UI; may be blocked by background restrictions.
+        // Best-effort bring UI for *current active* alarm
+        val active = RingQueue.getActiveAlarmId(context) ?: alarmId
         val activityIntent = Intent(context, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            putExtra(EXTRA_ALARM_ID, alarmId)
+            putExtra(EXTRA_ALARM_ID, active)
             putExtra(EXTRA_FROM_ALARM, true)
         }
-        try {
-            context.startActivity(activityIntent)
-        } catch (_: Throwable) {
-            // Notification OPEN action should still allow user to bring app to front.
-        }
+        try { context.startActivity(activityIntent) } catch (_: Throwable) {}
     }
 
     companion object {
