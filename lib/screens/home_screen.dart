@@ -142,7 +142,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _addAlarm() async {
     final pickedTime = await _pickCircularTime();
     if (pickedTime == null) return;
-
+    if (!mounted) return;
     final passwordController = TextEditingController();
     String? chosenSoundPath;
 
@@ -217,7 +217,7 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       },
     );
-
+    
     if (password == null || password.isEmpty) return;
 
     final now = DateTime.now();
@@ -337,11 +337,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (confirm == true) {
                   await AlarmService.clearAllData();
                   await _loadAlarms();
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('All data cleared')),
-                    );
-                  }
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    const SnackBar(content: Text('All data cleared')),
+                  );
+
+                  
                 }
               }
             },

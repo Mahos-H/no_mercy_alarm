@@ -422,17 +422,3 @@ class _AlarmRingingScreenState extends State<AlarmRingingScreen>
     );
   }
 }
-
-/// This avoids importing HomeScreen here (keeps the file independent).
-/// We just need a widget to land on; main.dart will rebuild HomeScreen anyway.
-class _BackToHomePlaceholder extends StatelessWidget {
-  const _BackToHomePlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(child: CircularProgressIndicator()),
-    );
-  }
-}

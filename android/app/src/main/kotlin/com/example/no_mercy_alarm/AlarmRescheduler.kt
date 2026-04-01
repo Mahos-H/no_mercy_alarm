@@ -14,7 +14,7 @@ object AlarmRescheduler {
 
         // Find keys: alarm_<id> where value is JSON string
         val all = prefs.all
-        for ((key, value) in all) {
+        for ((rawKey, value) in all) {
             val key = rawKey.removePrefix("flutter.")
             if (!key.startsWith("alarm_")) continue
             // Exclude "alarm_<id>_first_wrong_at_ms"
