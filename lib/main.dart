@@ -94,10 +94,8 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
   bool _checking = false;
   AppLifecycleState _lifecycle = AppLifecycleState.resumed;
 
-  // Slow/steady polling while app is open.
   static const Duration _foregroundPollInterval = Duration(seconds: 2);
 
-  // Brief burst of faster polling right after resume/start to route immediately.
   static const Duration _burstInterval = Duration(milliseconds: 500);
   static const Duration _burstDuration = Duration(seconds: 10);
   Timer? _burstTimer;
@@ -107,10 +105,7 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    // One immediate check.
     _checkAndRoute();
-
-    // Start polling (foreground).
     _startPolling();
     _startBurst();
   }
@@ -132,7 +127,6 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
       _startBurst();
       _checkAndRoute();
     } else {
-      // Stop polling in background/inactive to reduce battery use.
       _stopPolling();
       _stopBurst();
     }
@@ -177,7 +171,6 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
     _checking = true;
 
     try {
-      // Route based on last ring log event (as requested).
       final lastEvent = await RingLogService.getLastEvent();
       if (!mounted) return;
       if (lastEvent == null) return;
@@ -193,16 +186,10 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
           : int.tryParse(alarmIdRaw?.toString() ?? '');
       if (alarmId == null) return;
 
-      // Load alarm FIRST (before we delete it from the menu/prefs).
+      // Option C: do NOT delete from prefs/menu here.
       final alarm = await AlarmService.getAlarmById(alarmId);
       if (!mounted) return;
       if (alarm == null) return;
-
-      // IMPORTANT: delete from menu/storage BEFORE showing ringing screen
-      // so the user can't delete it from the list to "stop" it.
-      //
-      // This must NOT stop ringing audio and must NOT cancel alarms.
-      await AlarmService.deleteAlarmFromMenuOnly(alarmId);
 
       _navigated = true;
       Navigator.of(context)

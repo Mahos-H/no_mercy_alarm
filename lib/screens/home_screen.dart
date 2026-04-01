@@ -19,11 +19,17 @@ class _HomeScreenState extends State<HomeScreen> {
   List<AlarmModel> alarms = [];
   StreamSubscription<List<AlarmModel>>? _alarmsSub;
 
+  int? _activeAlarmId;
+  Timer? _activePoll;
+
+  static const _activePollInterval = Duration(seconds: 1);
+
   @override
   void initState() {
     super.initState();
     _loadAlarms();
     _listenToAlarmChanges();
+    _startActiveAlarmPolling();
   }
 
   void _listenToAlarmChanges() {
@@ -35,8 +41,29 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _startActiveAlarmPolling() {
+    _activePoll?.cancel();
+
+    // One immediate fetch so UI disables delete quickly.
+    _refreshActiveAlarmId();
+
+    _activePoll = Timer.periodic(_activePollInterval, (_) {
+      _refreshActiveAlarmId();
+    });
+  }
+
+  Future<void> _refreshActiveAlarmId() async {
+    final id = await AlarmService.getActiveAlarmId();
+    if (!mounted) return;
+
+    if (id != _activeAlarmId) {
+      setState(() => _activeAlarmId = id);
+    }
+  }
+
   @override
   void dispose() {
+    _activePoll?.cancel();
     _alarmsSub?.cancel();
     super.dispose();
   }
@@ -77,19 +104,15 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // 31-bit stable hash (so it fits typical AlarmManager requestCode expectations).
   int _hashToPositive31Bit(String s) {
-    // FNV-1a 32-bit
     int hash = 0x811C9DC5;
     for (final unit in s.codeUnits) {
       hash ^= unit;
       hash = (hash * 0x01000193) & 0xFFFFFFFF;
     }
-    // Keep it positive and within 31-bit signed int range.
     return hash & 0x7FFFFFFF;
   }
 
-  // Hash a canonical string with the date + chosen HH:MM.
   Future<int> _generateAlarmId(DateTime alarmTime) async {
     final keyStr =
         '${alarmTime.year.toString().padLeft(4, '0')}-'
@@ -100,8 +123,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     var id = _hashToPositive31Bit(keyStr);
 
-    // Avoid collisions with existing alarms (linear probe).
-    // Note: AlarmService stores alarms under "alarm_<id>".
     while (await AlarmService.getAlarmById(id) != null) {
       id = (id + 1) & 0x7FFFFFFF;
       if (id == 0) id = 1;
@@ -208,21 +229,16 @@ class _HomeScreenState extends State<HomeScreen> {
       pickedTime.minute,
     );
 
-    // If time is in the past, schedule for tomorrow
     if (alarmTime.isBefore(now)) {
       alarmTime = alarmTime.add(const Duration(days: 1));
     }
 
-    // Prevent duplicate alarms at the same target time.
-    // (We treat "same minute" as same target time since UI picker is minute-based.)
     final existing = alarms.any((a) => _sameMinute(a.time, alarmTime));
     if (existing) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'An alarm is already set for ${_formatTime(alarmTime)}.',
-            ),
+            content: Text('An alarm is already set for ${_formatTime(alarmTime)}.'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -261,8 +277,18 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _deleteAlarm(int id) async {
-    await AlarmService.cancelAlarm(id);
+  Future<void> _deleteAlarm(AlarmModel alarm) async {
+    // Option C enforcement: prevent deleting the active alarm.
+    if (_activeAlarmId != null && alarm.id == _activeAlarmId) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('This alarm is currently ringing and cannot be deleted.')),
+        );
+      }
+      return;
+    }
+
+    await AlarmService.cancelAlarm(alarm.id);
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -363,9 +389,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     alarm.time.month == now.month &&
                     alarm.time.year == now.year;
 
+                final isActive = _activeAlarmId != null && alarm.id == _activeAlarmId;
+
                 return Card(
-                  margin:
-                      const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                   child: ListTile(
                     leading: CircleAvatar(
                       backgroundColor: Colors.blue.shade100,
@@ -384,23 +411,32 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(isToday ? 'Today' : 'Tomorrow'),
                         if (alarm.soundPath != null)
                           Text(
-                            alarm.soundPath!
-                                .split(Platform.pathSeparator)
-                                .last,
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey[600]),
+                            alarm.soundPath!.split(Platform.pathSeparator).last,
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
                           )
                         else
                           Text(
                             'Default sound',
-                            style: TextStyle(
-                                fontSize: 11, color: Colors.grey[600]),
+                            style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                          ),
+                        if (isActive)
+                          const Padding(
+                            padding: EdgeInsets.only(top: 4),
+                            child: Text(
+                              'RINGING',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.red,
+                              ),
+                            ),
                           ),
                       ],
                     ),
                     trailing: IconButton(
-                      icon: const Icon(Icons.delete, color: Colors.red),
-                      onPressed: () => _deleteAlarm(alarm.id),
+                      icon: Icon(Icons.delete, color: isActive ? Colors.grey : Colors.red),
+                      onPressed: isActive ? () => _deleteAlarm(alarm) : () => _deleteAlarm(alarm),
+                      // (we still route through _deleteAlarm so it can show snackbar)
                     ),
                   ),
                 );

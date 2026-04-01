@@ -23,10 +23,7 @@ class AlarmService {
       StreamController<List<AlarmModel>>.broadcast();
   static Stream<List<AlarmModel>> get alarmsStream => _alarmsController.stream;
 
-  // Only accept keys like "alarm_123" (numeric id), not "alarm_ringing", etc.
   static final RegExp _alarmKeyPattern = RegExp(r'^alarm_(\d+)$');
-
-  // ================= INITIALIZATION =================
 
   static Future<void> initialize() async {
     _prefs = await SharedPreferences.getInstance();
@@ -37,7 +34,6 @@ class AlarmService {
       settings: const InitializationSettings(android: androidInit),
     );
 
-    // Create notification channel (Android)
     const channel = AndroidNotificationChannel(
       'alarm_channel',
       'Alarms',
@@ -54,12 +50,9 @@ class AlarmService {
 
     await androidPlugin?.createNotificationChannel(channel);
 
-    // Seed stream
     final alarms = await getAllAlarms();
     _alarmsController.add(alarms);
   }
-
-  // ================= ALARM STORAGE + SCHEDULING =================
 
   static Future<void> scheduleAlarm(AlarmModel alarm) async {
     await _prefs.setString('alarm_${alarm.id}', jsonEncode(alarm.toJson()));
@@ -74,7 +67,6 @@ class AlarmService {
   }
 
   static Future<List<AlarmModel>> getAllAlarms() async {
-    // Filter keys strictly to alarm_<number>
     final alarmKeys = _prefs
         .getKeys()
         .where((k) => _alarmKeyPattern.hasMatch(k))
@@ -83,14 +75,11 @@ class AlarmService {
     final alarms = <AlarmModel>[];
 
     for (final key in alarmKeys) {
-      // SAFETY: shared_preferences throws if underlying type is not String.
-      // So we read the raw map to check the type first.
       final raw = _prefs.get(key);
 
       if (raw == null) continue;
 
       if (raw is! String) {
-        // Unexpected type under alarm_* key — remove it to prevent future crashes.
         await _prefs.remove(key);
         continue;
       }
@@ -103,13 +92,11 @@ class AlarmService {
       }
     }
 
-    // Sort by scheduled time (not creation time)
     alarms.sort((a, b) => a.time.compareTo(b.time));
     return alarms;
   }
 
   static Future<AlarmModel?> getAlarmById(int id) async {
-    // Reads the stored JSON for this alarm id
     final jsonStr = _prefs.getString('alarm_$id');
     if (jsonStr == null) return null;
 
@@ -120,12 +107,8 @@ class AlarmService {
     }
   }
 
-  /// Deletes an alarm from the in-app list (SharedPreferences + stream),
-  /// but does NOT attempt to stop ringing audio and does NOT cancel alarms
-  /// at the Android AlarmManager level.
-  ///
-  /// Use this when an alarm is already ringing, and you want to prevent the
-  /// user from "deleting to stop it".
+  /// Option C: keep alarm in prefs while ringing; we do not use this.
+  /// (You can delete this method if nothing else references it.)
   static Future<void> deleteAlarmFromMenuOnly(int alarmId) async {
     await _prefs.remove('alarm_${alarmId}_first_wrong_at_ms');
     await _prefs.remove('alarm_$alarmId');
@@ -135,13 +118,10 @@ class AlarmService {
   }
 
   static Future<void> stopAlarmAndCleanup({required int alarmId}) async {
-    // stop native ringing service (audio)
     await _channel.invokeMethod('stopAndAdvanceQueue', {'alarmId': alarmId});
 
-    // clear notification if any
     await _notifications.cancel(id: alarmId);
 
-    // clear any wrong-at timestamp + remove alarm (one-shot)
     await _prefs.remove('alarm_${alarmId}_first_wrong_at_ms');
     await _prefs.remove('alarm_$alarmId');
 
@@ -157,10 +137,27 @@ class AlarmService {
     _alarmsController.add(alarms);
   }
 
-  // ================= RINGING STATE =================
+  /// Returns the active alarm id if known.
+  /// - Prefer Dart prefs
+  /// - Fallback to native queue (so HomeScreen can disable delete reliably)
+  static Future<int?> getActiveAlarmId() async {
+    final id = _prefs.getInt(_activeAlarmIdKey);
+    if (id != null) return id;
+
+    try {
+      final nativeActive =
+          await _channel.invokeMethod<dynamic>('ringQueue_getActiveAlarmId');
+      final nativeId = (nativeActive is int)
+          ? nativeActive
+          : int.tryParse(nativeActive?.toString() ?? '');
+      return nativeId;
+    } catch (_) {
+      return null;
+    }
+  }
 
   static Future<AlarmModel?> getActiveAlarm() async {
-    final id = _prefs.getInt(_activeAlarmIdKey);
+    final id = await getActiveAlarmId();
     if (id == null) return null;
 
     final jsonStr = _prefs.getString('alarm_$id');
@@ -176,22 +173,20 @@ class AlarmService {
   static Future<void> stopAlarm() async {
     final id = _prefs.getInt(_activeAlarmIdKey);
 
-    // stop native ringing service (audio) + advance queue
     if (id != null) {
       await _channel.invokeMethod('stopAndAdvanceQueue', {'alarmId': id});
     } else {
-      // fallback: ask native for the active alarm id
-      final nativeActive =
-          await _channel.invokeMethod<dynamic>('ringQueue_getActiveAlarmId');
-      final nativeId = (nativeActive is int)
-          ? nativeActive
-          : int.tryParse(nativeActive?.toString() ?? '');
+      final nativeId = await getActiveAlarmId();
       if (nativeId != null) {
         await _channel.invokeMethod('stopAndAdvanceQueue', {'alarmId': nativeId});
+      } else {
+        // As a last resort, try stopping audio without queue advancement.
+        try {
+          await _channel.invokeMethod('stopRingingService');
+        } catch (_) {}
       }
     }
 
-    // clear notification if any
     if (id != null) {
       await _notifications.cancel(id: id);
     }
@@ -201,14 +196,13 @@ class AlarmService {
 
     if (id != null) {
       await _prefs.remove('alarm_${id}_first_wrong_at_ms');
-      await _prefs.remove('alarm_$id'); // one-shot behavior
+      await _prefs.remove('alarm_$id');
     }
 
     final alarms = await getAllAlarms();
     _alarmsController.add(alarms);
   }
 
-  // ================= OPTIONAL: HEADS-UP NOTIFICATION =================
   static Future<void> showAlarmNotification(int alarmId) async {
     final androidDetails = AndroidNotificationDetails(
       'alarm_channel',
@@ -244,22 +238,29 @@ class AlarmService {
   static Future<void> clearAllData() async {
     // 1) Cancel scheduled alarms first (so they don't keep firing after prefs wipe)
     final alarms = await getAllAlarms();
-    final id = _prefs.getInt(_activeAlarmIdKey);
+    final activeId = await getActiveAlarmId();
+
     for (final a in alarms) {
       try {
         await _channel.invokeMethod('cancelExactAlarm', {'alarmId': a.id});
-      } catch (_) {
-        // ignore best-effort
-      }
+      } catch (_) {}
       try {
         await _notifications.cancel(id: a.id);
       } catch (_) {}
     }
 
-    // 2) Stop ringing audio (native)
-    try {
-      await _channel.invokeMethod('stopAndAdvanceQueue', {'alarmId': id});
-    } catch (_) {}
+    // 2) Stop ringing audio (native) safely:
+    // Never pass null alarmId into stopAndAdvanceQueue.
+    if (activeId != null) {
+      try {
+        await _channel.invokeMethod('stopAndAdvanceQueue', {'alarmId': activeId});
+      } catch (_) {}
+    } else {
+      // Best-effort fallback
+      try {
+        await _channel.invokeMethod('stopRingingService');
+      } catch (_) {}
+    }
 
     // 3) Clear native queue + ring log
     try {
@@ -276,8 +277,8 @@ class AlarmService {
     _alarmsController.add(const <AlarmModel>[]);
   }
 
-  // Dispose note: see section 3 below (we will not close controller in app lifetime)
   static void dispose() {
-    //
+    // App-lifetime singleton: intentionally no-op.
+    // If you ever need to dispose in tests, close _alarmsController there.
   }
 }
