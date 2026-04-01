@@ -19,7 +19,8 @@ class AlarmService {
 
   static const MethodChannel _channel = MethodChannel('no_mercy_alarm/alarm');
 
-  static final _alarmsController = StreamController<List<AlarmModel>>.broadcast();
+  static final _alarmsController =
+      StreamController<List<AlarmModel>>.broadcast();
   static Stream<List<AlarmModel>> get alarmsStream => _alarmsController.stream;
 
   // Only accept keys like "alarm_123" (numeric id), not "alarm_ringing", etc.
@@ -106,6 +107,7 @@ class AlarmService {
     alarms.sort((a, b) => a.time.compareTo(b.time));
     return alarms;
   }
+
   static Future<AlarmModel?> getAlarmById(int id) async {
     // Reads the stored JSON for this alarm id
     final jsonStr = _prefs.getString('alarm_$id');
@@ -117,6 +119,21 @@ class AlarmService {
       return null;
     }
   }
+
+  /// Deletes an alarm from the in-app list (SharedPreferences + stream),
+  /// but does NOT attempt to stop ringing audio and does NOT cancel alarms
+  /// at the Android AlarmManager level.
+  ///
+  /// Use this when an alarm is already ringing, and you want to prevent the
+  /// user from "deleting to stop it".
+  static Future<void> deleteAlarmFromMenuOnly(int alarmId) async {
+    await _prefs.remove('alarm_${alarmId}_first_wrong_at_ms');
+    await _prefs.remove('alarm_$alarmId');
+
+    final alarms = await getAllAlarms();
+    _alarmsController.add(alarms);
+  }
+
   static Future<void> stopAlarmAndCleanup({required int alarmId}) async {
     // stop native ringing service (audio)
     await _channel.invokeMethod('stopAndAdvanceQueue', {'alarmId': alarmId});
@@ -131,6 +148,7 @@ class AlarmService {
     final alarms = await getAllAlarms();
     _alarmsController.add(alarms);
   }
+
   static Future<void> cancelAlarm(int id) async {
     await _prefs.remove('alarm_$id');
     await _channel.invokeMethod('cancelExactAlarm', {'alarmId': id});
@@ -140,8 +158,6 @@ class AlarmService {
   }
 
   // ================= RINGING STATE =================
-
-
 
   static Future<AlarmModel?> getActiveAlarm() async {
     final id = _prefs.getInt(_activeAlarmIdKey);
@@ -156,6 +172,7 @@ class AlarmService {
       return null;
     }
   }
+
   static Future<void> stopAlarm() async {
     final id = _prefs.getInt(_activeAlarmIdKey);
 
@@ -190,7 +207,8 @@ class AlarmService {
     final alarms = await getAllAlarms();
     _alarmsController.add(alarms);
   }
-    // ================= OPTIONAL: HEADS-UP NOTIFICATION =================
+
+  // ================= OPTIONAL: HEADS-UP NOTIFICATION =================
   static Future<void> showAlarmNotification(int alarmId) async {
     final androidDetails = AndroidNotificationDetails(
       'alarm_channel',
@@ -222,6 +240,7 @@ class AlarmService {
       notificationDetails: NotificationDetails(android: androidDetails),
     );
   }
+
   static Future<void> clearAllData() async {
     // 1) Cancel scheduled alarms first (so they don't keep firing after prefs wipe)
     final alarms = await getAllAlarms();
@@ -258,7 +277,6 @@ class AlarmService {
   }
 
   // Dispose note: see section 3 below (we will not close controller in app lifetime)
-
   static void dispose() {
     //
   }

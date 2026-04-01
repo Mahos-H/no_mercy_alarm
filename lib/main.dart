@@ -155,7 +155,6 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
   void _startBurst() {
     _stopBurst();
 
-    // Fast poll for a short time, then we fall back to the slower periodic timer.
     _burstTimer = Timer.periodic(_burstInterval, (_) {
       if (!mounted) return;
       if (_lifecycle != AppLifecycleState.resumed) return;
@@ -194,9 +193,16 @@ class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
           : int.tryParse(alarmIdRaw?.toString() ?? '');
       if (alarmId == null) return;
 
+      // Load alarm FIRST (before we delete it from the menu/prefs).
       final alarm = await AlarmService.getAlarmById(alarmId);
       if (!mounted) return;
       if (alarm == null) return;
+
+      // IMPORTANT: delete from menu/storage BEFORE showing ringing screen
+      // so the user can't delete it from the list to "stop" it.
+      //
+      // This must NOT stop ringing audio and must NOT cancel alarms.
+      await AlarmService.deleteAlarmFromMenuOnly(alarmId);
 
       _navigated = true;
       Navigator.of(context)

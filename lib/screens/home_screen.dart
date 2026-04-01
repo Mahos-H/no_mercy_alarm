@@ -89,8 +89,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return hash & 0x7FFFFFFF;
   }
 
-  // "minimum hash of current date-and then actual datetime"
-  // We'll interpret that as: hash a canonical string with the date + chosen HH:MM.
+  // Hash a canonical string with the date + chosen HH:MM.
   Future<int> _generateAlarmId(DateTime alarmTime) async {
     final keyStr =
         '${alarmTime.year.toString().padLeft(4, '0')}-'
@@ -109,6 +108,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return id;
+  }
+
+  bool _sameMinute(DateTime a, DateTime b) {
+    return a.year == b.year &&
+        a.month == b.month &&
+        a.day == b.day &&
+        a.hour == b.hour &&
+        a.minute == b.minute;
   }
 
   Future<void> _addAlarm() async {
@@ -204,6 +211,23 @@ class _HomeScreenState extends State<HomeScreen> {
     // If time is in the past, schedule for tomorrow
     if (alarmTime.isBefore(now)) {
       alarmTime = alarmTime.add(const Duration(days: 1));
+    }
+
+    // Prevent duplicate alarms at the same target time.
+    // (We treat "same minute" as same target time since UI picker is minute-based.)
+    final existing = alarms.any((a) => _sameMinute(a.time, alarmTime));
+    if (existing) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'An alarm is already set for ${_formatTime(alarmTime)}.',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
     }
 
     final id = await _generateAlarmId(alarmTime);
@@ -360,7 +384,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         Text(isToday ? 'Today' : 'Tomorrow'),
                         if (alarm.soundPath != null)
                           Text(
-                            alarm.soundPath!.split(Platform.pathSeparator).last,
+                            alarm.soundPath!
+                                .split(Platform.pathSeparator)
+                                .last,
                             style: TextStyle(
                                 fontSize: 11, color: Colors.grey[600]),
                           )
