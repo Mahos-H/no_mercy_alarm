@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:android_alarm_manager_plus/android_alarm_manager_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -87,73 +89,128 @@ class AlarmCheckerScreen extends StatefulWidget {
 class _AlarmCheckerScreenState extends State<AlarmCheckerScreen>
     with WidgetsBindingObserver {
   bool _navigated = false;
-  bool _startedWatcher = false;
+
+  Timer? _pollTimer;
+  bool _checking = false;
+  AppLifecycleState _lifecycle = AppLifecycleState.resumed;
+
+  // Slow/steady polling while app is open.
+  static const Duration _foregroundPollInterval = Duration(seconds: 2);
+
+  // Brief burst of faster polling right after resume/start to route immediately.
+  static const Duration _burstInterval = Duration(milliseconds: 500);
+  static const Duration _burstDuration = Duration(seconds: 10);
+  Timer? _burstTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
+    // One immediate check.
     _checkAndRoute();
-    _startForegroundWatcher();
-  }
 
-  void _startForegroundWatcher() {
-    if (_startedWatcher) return;
-    _startedWatcher = true;
-
-    Future.doWhile(() async {
-      if (!mounted) return false;
-      await _checkAndRoute();
-      await Future.delayed(const Duration(milliseconds: 300));
-      return mounted;
-    });
+    // Start polling (foreground).
+    _startPolling();
+    _startBurst();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _stopPolling();
+    _stopBurst();
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycle = state;
+
     if (state == AppLifecycleState.resumed) {
+      _startPolling();
+      _startBurst();
       _checkAndRoute();
+    } else {
+      // Stop polling in background/inactive to reduce battery use.
+      _stopPolling();
+      _stopBurst();
     }
+  }
+
+  void _startPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(_foregroundPollInterval, (_) {
+      if (!mounted) return;
+      if (_lifecycle != AppLifecycleState.resumed) return;
+      _checkAndRoute();
+    });
+  }
+
+  void _stopPolling() {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+  }
+
+  void _startBurst() {
+    _stopBurst();
+
+    // Fast poll for a short time, then we fall back to the slower periodic timer.
+    _burstTimer = Timer.periodic(_burstInterval, (_) {
+      if (!mounted) return;
+      if (_lifecycle != AppLifecycleState.resumed) return;
+      _checkAndRoute();
+    });
+
+    Timer(_burstDuration, () {
+      _stopBurst();
+    });
+  }
+
+  void _stopBurst() {
+    _burstTimer?.cancel();
+    _burstTimer = null;
   }
 
   Future<void> _checkAndRoute() async {
     if (_navigated) return;
+    if (_checking) return;
+    _checking = true;
 
-    final lastEvent = await RingLogService.getLastEvent();
-    if (!mounted) return;
+    try {
+      // Route based on last ring log event (as requested).
+      final lastEvent = await RingLogService.getLastEvent();
+      if (!mounted) return;
+      if (lastEvent == null) return;
 
-    if (lastEvent == null) return;
+      final state = (lastEvent['state'] ?? '').toString();
+      if (state != 'FIRED' && state != 'SHOWN') {
+        return;
+      }
 
-    final state = (lastEvent['state'] ?? '').toString();
-    if (state != 'FIRED' && state != 'SHOWN') {
-      return;
+      final alarmIdRaw = lastEvent['alarmId'];
+      final alarmId = alarmIdRaw is int
+          ? alarmIdRaw
+          : int.tryParse(alarmIdRaw?.toString() ?? '');
+      if (alarmId == null) return;
+
+      final alarm = await AlarmService.getAlarmById(alarmId);
+      if (!mounted) return;
+      if (alarm == null) return;
+
+      _navigated = true;
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (_) => AlarmRingingScreen(alarm: alarm),
+            ),
+          )
+          .then((_) {
+        _navigated = false;
+      });
+    } finally {
+      _checking = false;
     }
-
-    final alarmIdRaw = lastEvent['alarmId'];
-    final alarmId = alarmIdRaw is int
-        ? alarmIdRaw
-        : int.tryParse(alarmIdRaw?.toString() ?? '');
-    if (alarmId == null) return;
-
-    final alarm = await AlarmService.getAlarmById(alarmId);
-    if (!mounted) return;
-    if (alarm == null) return;
-
-    _navigated = true;
-    Navigator.of(context)
-        .push(
-          MaterialPageRoute(
-            builder: (_) => AlarmRingingScreen(alarm: alarm),
-          ),
-        )
-        .then((_) => _navigated = false);
   }
 
   @override

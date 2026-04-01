@@ -57,11 +57,12 @@ object AlarmRescheduler {
 
 
     private fun extractTimeMillis(json: String): Long? {
-    return try {
-        val obj = JSONObject(json)
-        obj.optLong("timeMillis", -1L).takeIf { it > 0 }
-    } catch (_: Throwable) {
-        null
+        return try {
+            val obj = JSONObject(json)
+            obj.optLong("timeMillis", -1L).takeIf { it > 0 }
+        } catch (_: Throwable) {
+            null
+        }
     }
 
 

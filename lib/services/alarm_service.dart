@@ -225,6 +225,7 @@ class AlarmService {
   static Future<void> clearAllData() async {
     // 1) Cancel scheduled alarms first (so they don't keep firing after prefs wipe)
     final alarms = await getAllAlarms();
+    final id = _prefs.getInt(_activeAlarmIdKey);
     for (final a in alarms) {
       try {
         await _channel.invokeMethod('cancelExactAlarm', {'alarmId': a.id});
@@ -238,7 +239,7 @@ class AlarmService {
 
     // 2) Stop ringing audio (native)
     try {
-      await _channel.invokeMethod('stopRingingService');
+      await _channel.invokeMethod('stopAndAdvanceQueue', {'alarmId': id});
     } catch (_) {}
 
     // 3) Clear native queue + ring log

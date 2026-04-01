@@ -1,9 +1,9 @@
-import 'dart:io';
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
-import 'package:file_picker/file_picker.dart';
+import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart';
+import 'package:flutter/material.dart';
 
 import '../models/alarm_model.dart';
 import '../services/alarm_service.dart';
@@ -75,6 +75,40 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+  }
+
+  // 31-bit stable hash (so it fits typical AlarmManager requestCode expectations).
+  int _hashToPositive31Bit(String s) {
+    // FNV-1a 32-bit
+    int hash = 0x811C9DC5;
+    for (final unit in s.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0xFFFFFFFF;
+    }
+    // Keep it positive and within 31-bit signed int range.
+    return hash & 0x7FFFFFFF;
+  }
+
+  // "minimum hash of current date-and then actual datetime"
+  // We'll interpret that as: hash a canonical string with the date + chosen HH:MM.
+  Future<int> _generateAlarmId(DateTime alarmTime) async {
+    final keyStr =
+        '${alarmTime.year.toString().padLeft(4, '0')}-'
+        '${alarmTime.month.toString().padLeft(2, '0')}-'
+        '${alarmTime.day.toString().padLeft(2, '0')}T'
+        '${alarmTime.hour.toString().padLeft(2, '0')}:'
+        '${alarmTime.minute.toString().padLeft(2, '0')}';
+
+    var id = _hashToPositive31Bit(keyStr);
+
+    // Avoid collisions with existing alarms (linear probe).
+    // Note: AlarmService stores alarms under "alarm_<id>".
+    while (await AlarmService.getAlarmById(id) != null) {
+      id = (id + 1) & 0x7FFFFFFF;
+      if (id == 0) id = 1;
+    }
+
+    return id;
   }
 
   Future<void> _addAlarm() async {
@@ -172,8 +206,10 @@ class _HomeScreenState extends State<HomeScreen> {
       alarmTime = alarmTime.add(const Duration(days: 1));
     }
 
+    final id = await _generateAlarmId(alarmTime);
+
     final alarm = AlarmModel(
-      id: DateTime.now().millisecondsSinceEpoch % 2147483647,
+      id: id,
       time: alarmTime,
       password: password,
       isActive: true,

@@ -3,6 +3,8 @@ package com.example.no_mercy_alarm
 import android.content.Context
 import android.content.Intent
 import org.json.JSONArray
+import android.os.Build
+import androidx.core.content.ContextCompat
 
 object RingQueue {
     private const val PREFS = "alarm_ring_queue"
@@ -90,7 +92,10 @@ object RingQueue {
             putExtra(AlarmReceiver.EXTRA_ALARM_ID, next)
             putExtra(AlarmReceiver.EXTRA_FROM_ALARM, true)
         }
-        // startForegroundService handled inside receiver typically; service will restart sticky too
-        context.startService(serviceIntent)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            ContextCompat.startForegroundService(context, serviceIntent)
+        } else {
+            context.startService(serviceIntent)
+        }
     }
 }
