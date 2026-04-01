@@ -154,7 +154,6 @@ class RingingService : Service() {
             // Best-effort: request full-screen UI
             .setFullScreenIntent(openPending, true)
             .addAction(0, "OPEN", openPending)
-            .addAction(0, "EMERGENCY STOP", stopPending)
             .build()
     }
 
